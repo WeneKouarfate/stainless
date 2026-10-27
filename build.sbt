@@ -256,6 +256,7 @@ lazy val `stainless-core` = (project in file("core"))
   // .settings(commonSettings, publishMavenSettings)
   .settings(commonSettings)
   //.settings(site.settings)
+  .settings(noPublishSettings)
   .dependsOn(inox % "compile->compile;test->test")
   .dependsOn(cafebabe % "compile->compile")
 
@@ -274,6 +275,7 @@ lazy val `stainless-algebra` = (project in file("frontends") / "algebra")
   .disablePlugins(AssemblyPlugin)
   // .settings(stainlessLibSettings, publishMavenSettings)
   .settings(stainlessLibSettings)
+  .settings(noPublishSettings)
   .settings(
     name := "stainless-algebra",
     version := "0.1.2",
@@ -320,7 +322,8 @@ lazy val `stainless-dotty` = (project in file("frontends/dotty"))
   .configs(IntegrationTest)
 
 lazy val `stainless-dotty-plugin` = (project in file("frontends") / "stainless-dotty-plugin")
-  .settings(artifactSettings, publishMavenSettings, assemblySettings)
+  //.settings(artifactSettings, publishMavenSettings, assemblySettings)
+  .settings(artifactSettings, assemblySettings)
   .settings(
     name := "stainless-dotty-plugin",
     crossVersion := CrossVersion.full, // because compiler api is not binary compatible
@@ -331,6 +334,7 @@ lazy val `stainless-dotty-standalone` = (project in file("frontends") / "stainle
   .enablePlugins(BuildInfoPlugin)
   .enablePlugins(JavaAppPackaging)
   .settings(artifactSettings, assemblySettings)
+  .settings(noPublishSettings)
   .settings(
     name := "stainless-dotty-standalone",
     buildInfoKeys ++= Seq[BuildInfoKey]("useJavaClassPath" -> true),
@@ -350,6 +354,7 @@ lazy val `sbt-stainless` = (project in file("sbt-plugin"))
   .enablePlugins(SbtPlugin)
   .settings(baseSettings)
   // .settings(publishSbtSettings)
+  .settings(noPublishSettings)
   .settings(
     // Note: sbt-stainless is itself compiled with Scala 2.12 (as is SBT 1.x)
     description := "Plugin integrating Stainless in sbt",
