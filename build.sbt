@@ -73,7 +73,7 @@ lazy val commonSettings: Seq[Setting[_]] = artifactSettings ++ Seq(
     "-feature"
   ),
 
-  resolvers ++= Resolver.sonatypeOssRepos("releases"),
+  //resolvers ++= Resolver.sonatypeOssRepos("releases"),
   resolvers += ("uuverifiersStainless" at "https://eldarica.org/maven"),
 
   libraryDependencies ++= Seq(

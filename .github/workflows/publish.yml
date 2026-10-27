@@ -9,6 +9,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -19,4 +20,4 @@ jobs:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           PGP_SECRET: ${{ secrets.PGP_SECRET }}
-          # PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}   # only if your key has one
+          # PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
