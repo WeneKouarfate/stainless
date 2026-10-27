@@ -54,7 +54,7 @@ lazy val baseSettings: Seq[Setting[_]] = Seq(
   // organization := laraOrganization,
   organization := "io.github.WeneKouarfate",
   homepage := Some(url("https://github.com/WeneKouarfate/stainless")),
-  developers := List(Developer("WeneKouarfate", "Your Name", "your-email@example.com", url("https://github.com/WeneKouarfate"))),
+  developers := List(Developer("WeneKouarfate", "Wène", "wene.kouarfate@epfl.ch", url("https://github.com/WeneKouarfate"))),
   licenses := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.html")),
   scalaOrganization := laraOrganization,
 )
