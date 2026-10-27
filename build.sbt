@@ -51,7 +51,10 @@ lazy val noPublishSettings: Seq[Setting[_]] = Seq(
 )
 
 lazy val baseSettings: Seq[Setting[_]] = Seq(
-  organization := laraOrganization,
+  // organization := laraOrganization,
+  organization := "io.github.WeneKouarfate",
+  homepage := Some(url("https://github.com/WeneKouarfate/stainless")),
+  developers := List(Developer("WeneKouarfate", "Your Name", "your-email@example.com", url("https://github.com/WeneKouarfate"))),
   licenses := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.html")),
   scalaOrganization := laraOrganization,
 )
@@ -250,14 +253,16 @@ lazy val `stainless-core` = (project in file("core"))
   .enablePlugins(BuildInfoPlugin)
   //.enablePlugins(SphinxPlugin)
   .settings(name := "stainless-core")
-  .settings(commonSettings, publishMavenSettings)
+  // .settings(commonSettings, publishMavenSettings)
+  .settings(commonSettings)
   //.settings(site.settings)
   .dependsOn(inox % "compile->compile;test->test")
   .dependsOn(cafebabe % "compile->compile")
 
 lazy val `stainless-library` = (project in file("frontends") / "library")
   .disablePlugins(AssemblyPlugin)
-  .settings(stainlessLibSettings, publishMavenSettings)
+  // .settings(stainlessLibSettings, publishMavenSettings)
+  .settings(stainlessLibSettings)
   .settings(
     name := "stainless-library",
     scalaVersion := stainlessScalaVersion,
@@ -267,7 +272,8 @@ lazy val `stainless-library` = (project in file("frontends") / "library")
 
 lazy val `stainless-algebra` = (project in file("frontends") / "algebra")
   .disablePlugins(AssemblyPlugin)
-  .settings(stainlessLibSettings, publishMavenSettings)
+  // .settings(stainlessLibSettings, publishMavenSettings)
+  .settings(stainlessLibSettings)
   .settings(
     name := "stainless-algebra",
     version := "0.1.2",
@@ -343,12 +349,12 @@ lazy val `sbt-stainless` = (project in file("sbt-plugin"))
   .enablePlugins(BuildInfoPlugin)
   .enablePlugins(SbtPlugin)
   .settings(baseSettings)
-  .settings(publishSbtSettings)
+  // .settings(publishSbtSettings)
   .settings(
     // Note: sbt-stainless is itself compiled with Scala 2.12 (as is SBT 1.x)
     description := "Plugin integrating Stainless in sbt",
     sbtPlugin := true,
-    publishMavenStyle := false,
+    // publishMavenStyle := false,
     buildInfoUsePackageAsPath := true,
     buildInfoPackage := "ch.epfl.lara.sbt.stainless",
     buildInfoKeys ++= Seq[BuildInfoKey](
@@ -394,18 +400,18 @@ lazy val root = (project in file("."))
   .dependsOn(`stainless-library`, `stainless-dotty`, `sbt-stainless`)
   .aggregate(`stainless-core`, `stainless-library`, `stainless-dotty`, `sbt-stainless`, `stainless-dotty-plugin`)
 
-def commonPublishSettings = Seq(
-  bintrayOrganization := Some("epfl-lara")
-)
+// def commonPublishSettings = Seq(
+//   bintrayOrganization := Some("epfl-lara")
+// )
 
-// by default sbt-bintray publishes all sbt plugins in Ivy style
-def publishSbtSettings = commonPublishSettings ++ Seq(
-  bintrayRepository := "sbt-plugins"
-)
+// // by default sbt-bintray publishes all sbt plugins in Ivy style
+// def publishSbtSettings = commonPublishSettings ++ Seq(
+//   bintrayRepository := "sbt-plugins"
+// )
 
-// by default sbt-bintray publishes all artifacts but sbt plugins in Maven style
-def publishMavenSettings = commonPublishSettings ++ Seq(
-  bintrayRepository := "maven"
-)
+// // by default sbt-bintray publishes all artifacts but sbt plugins in Maven style
+// def publishMavenSettings = commonPublishSettings ++ Seq(
+//   bintrayRepository := "maven"
+// )
 
 // FIXME assembly should be disabled at the top level, but isn't

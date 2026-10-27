@@ -376,6 +376,7 @@ trait VerificationChecker { self =>
               // avoid reprinting VC if --debug=verification is enabled
               if (!reporter.isDebugEnabled(using DebugSectionVerification))
                 reporter.warning(prettify(vc.condition).asString)
+              reporter.warning(vc.getPos, "=> INVALID")
               reporter.warning(vc.getPos, vcResultMsg)
               reason match {
                 case VCStatus.CounterExample(cex) =>
