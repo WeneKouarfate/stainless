@@ -242,6 +242,13 @@ def ghProject(repo: String, version: String) = RootProject(uri(s"${repo}#${versi
 lazy val inox = RootProject(file("./inox"))
 lazy val cafebabe = ghProject("https://git:git@github.com/epfl-lara/cafebabe.git", "8656f80ed6612161263612e9c35d14467006e451")
 
+// During cross builds, if cafebabe is excluded because of an unsupported Scala
+// version, sbt falls back to these published module coordinates.
+cafebabe / organization := laraOrganization
+cafebabe / name := "cafebabe_2.12"
+cafebabe / version := "1.2"
+cafebabe / crossPaths := false
+
 // Allow integration test to use facilities from regular tests
 lazy val IntegrationTest = config("it") extend(Test)
 
