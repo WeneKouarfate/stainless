@@ -17,7 +17,7 @@ jobs:
       - uses: sbt/setup-sbt@v1
       - name: Publish cafebabe locally
         run: sbt projects
-        run: sbt "cafebabe/publishLocal"
+          #run: sbt "cafebabe/publishLocal"
       - name: Publish to Maven Central
         run: sbt ci-release
         env:
