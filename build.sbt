@@ -243,7 +243,17 @@ Global / concurrentRestrictions := Seq(
 def ghProject(repo: String, version: String) = RootProject(uri(s"${repo}#${version}"))
 
 lazy val inox = RootProject(file("./inox"))
-lazy val cafebabe = ghProject("https://git:git@github.com/epfl-lara/cafebabe.git", "8656f80ed6612161263612e9c35d14467006e451")
+
+val cafebabeRepo = "https://git:git@github.com/epfl-lara/cafebabe.git"
+val cafebabeVersion = "8656f80ed6612161263612e9c35d14467006e451"
+
+addCommandAlias(
+  "publishCafebabeLocal",
+  s"project {${cafebabeRepo}#${cafebabeVersion}}; publishLocal"
+)
+
+
+lazy val cafebabe = ghProject(cafebabeRepo, cafebabeVersion)
 
 // Allow integration test to use facilities from regular tests
 lazy val IntegrationTest = config("it") extend(Test)
