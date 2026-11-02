@@ -102,6 +102,7 @@ lazy val commonSettings: Seq[Setting[_]] = artifactSettings ++ Seq(
     ExclusionRule("org.scala-lang", "scala3-compiler_3"),
     ExclusionRule("org.scala-lang", "scala-library"),
     ExclusionRule("default", "cafebabe_2.12"),
+    ExclusionRule("default", "cafebabe"),
   ),
 
   // disable documentation packaging in universal:stage to speedup development
