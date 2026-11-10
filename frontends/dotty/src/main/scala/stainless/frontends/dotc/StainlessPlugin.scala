@@ -107,12 +107,12 @@ class StainlessPlugin extends StandardPlugin {
         }
       }
       val inoxCtx = {
-        val base = mainHelper.getConfigContext(inox.Options.empty + inox.optTimeout(0.1))(using new stainless.PlainTextReporter(Set.empty))
+        val base = mainHelper.getConfigContext(inox.Options.empty)(using new stainless.PlainTextReporter(Set.empty))
         val adapter = new ReporterAdapter(base.reporter.debugSections)
         inox.Context(
           reporter         = adapter,
           interruptManager = new inox.utils.InterruptManager(adapter),
-          options          = base.options,
+          options          = base.options + inox.optTimeout(0.0),
           timers           = base.timers,
         )
       }
