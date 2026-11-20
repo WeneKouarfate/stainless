@@ -23,12 +23,14 @@ object StainlessPlugin {
   val EnableVerificationOptionName     = "verify:"
   val EnableGhostEliminationOptionName = "ghost-elim:"
   val TimeoutOptionName                = "timeout:"
+  val FunctionsOptionName              = "functions:"
 }
 
 case class PluginOptions(
   enableVerification: Boolean,
   enableGhostElimination: Boolean,
-  timeout: Option[Double]
+  timeout: Option[Double],
+  functions: Seq[String]
 )
 
 class StainlessPlugin extends StandardPlugin {
@@ -41,7 +43,7 @@ class StainlessPlugin extends StandardPlugin {
     val pluginOpts = parseOptions(options)
     List(
       if (pluginOpts.enableVerification)
-        Some(new ExtractionAndVerification(pluginOpts.timeout))
+        Some(new ExtractionAndVerification(pluginOpts.timeout, pluginOpts.functions))
       else None,
       if (pluginOpts.enableGhostElimination)
         Some(new GhostAccessRewriter(if (pluginOpts.enableVerification) "stainless" else Pickler.name))
@@ -65,6 +67,7 @@ class StainlessPlugin extends StandardPlugin {
     var enableVerification = false
     var enableGhostElimination = false
     var timeout: Option[Double] = None
+    var functions: Seq[String] = Seq.empty
 
     for (option <- options) {
       if (option.startsWith(EnableVerificationOptionName)) {
@@ -84,11 +87,18 @@ class StainlessPlugin extends StandardPlugin {
         parseTimeout(value).foreach { seconds =>
             timeout = Some(seconds)}
       }
+      else if (option.startsWith(FunctionsOptionName)) {
+        val value = option.substring(FunctionsOptionName.length)
+        parseFunctions(value).foreach { names =>
+          functions = names
+        }
+      }
     }
     PluginOptions(
       enableVerification = enableVerification,
       enableGhostElimination = enableGhostElimination,
-      timeout = timeout
+      timeout = timeout,
+      functions = functions
       )
   }
 
@@ -104,7 +114,12 @@ class StainlessPlugin extends StandardPlugin {
       seconds >= 0.0 && java.lang.Double.isFinite(seconds)
     }
 
-  private class ExtractionAndVerification(timeout: Option[Double]) extends PluginPhase {
+  private def parseFunctions(str: String): Option[Seq[String]] =
+    // options argument of initialize would split ',' separated string as other -P:stainless: options
+    val value = str.split(";", -1).toSeq.map(_.trim).filter(_.nonEmpty).mkString(",")
+    stainless.optFunctions.parser(value)
+
+  private class ExtractionAndVerification(timeout: Option[Double], functions: Seq[String]) extends PluginPhase {
     override val phaseName = "stainless"
     override val runsAfter = Set(Pickler.name)
     override val runsBefore = Set(FirstTransform.name)
@@ -130,11 +145,15 @@ class StainlessPlugin extends StandardPlugin {
       val inoxCtx = {
         val base = mainHelper.getConfigContext(inox.Options.empty)(using new stainless.PlainTextReporter(Set.empty))
         val adapter = new ReporterAdapter(base.reporter.debugSections)
-        val timeoutOptions = timeout.toSeq.map(seconds => inox.optTimeout(seconds))
+        // --timeout:t
+        val timeoutOptions = timeout.toSeq.map(inox.optTimeout(_))
+        // --function:f1,f2,...
+        val functionOptions = functions.headOption.toSeq.map(_ => stainless.optFunctions(functions))
+        
         inox.Context(
           reporter         = adapter,
           interruptManager = new inox.utils.InterruptManager(adapter),
-          options          = base.options ++ timeoutOptions,
+          options          = base.options ++ timeoutOptions ++ functionOptions,
           timers           = base.timers,
         )
       }
