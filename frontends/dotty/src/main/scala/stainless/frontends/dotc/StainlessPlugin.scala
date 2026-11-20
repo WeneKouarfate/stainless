@@ -81,8 +81,7 @@ class StainlessPlugin extends StandardPlugin {
       }
       else if (option.startsWith(TimeoutOptionName)) {
         val value = option.substring(TimeoutOptionName.length)
-        value.toDoubleOption.foreach { seconds =>
-          if (seconds >= 0.0 && !seconds.isInfinity && !seconds.isNaN)
+        parseTimeout(value).foreach { seconds =>
             timeout = Some(seconds)}
       }
     }
@@ -98,6 +97,11 @@ class StainlessPlugin extends StandardPlugin {
       case "false" | "no" => Some(false)
       case "true" | "yes" => Some(true)
       case _ => None
+    }
+  
+  private def parseTimeout(str: String): Option[Double] =
+    str.toDoubleOption.filter { seconds =>
+      seconds >= 0.0 && java.lang.Double.isFinite(seconds)
     }
 
   private class ExtractionAndVerification(timeout: Option[Double]) extends PluginPhase {

@@ -25,6 +25,7 @@ object StainlessPlugin extends sbt.AutoPlugin {
   object autoImport {
     val stainlessVersion        = settingKey[String]("The version of stainless to use")
     val stainlessEnabled        = settingKey[Boolean]("Enable stainless")
+    val stainlessTimeout        = settingKey[Option[Double]]("Per-verification timeout in seconds")
     val stainlessExtraDeps      = settingKey[Seq[sbt.librarymanagement.ModuleID]]("Extra source dependencies to pass along to Stainless")
     val stainlessExtraResolvers = settingKey[Seq[sbt.librarymanagement.MavenRepository]]("Extra resolvers to pass along to Stainless")
   }
@@ -70,6 +71,7 @@ object StainlessPlugin extends sbt.AutoPlugin {
   lazy val stainlessSettings: Seq[sbt.Def.Setting[?]] = Seq(
     stainlessVersion        := BuildInfo.stainlessVersion,
     stainlessEnabled        := true,
+    stainlessTimeout        := None,
     stainlessExtraDeps      := Seq.empty,
     autoCompilerPlugins     := true,
     ivyConfigurations       += StainlessLibSources,
@@ -236,7 +238,12 @@ object StainlessPlugin extends sbt.AutoPlugin {
 
           // For now we always enable ghost elimination
           "-P:stainless:ghost-elim:true",
-        ) ++ (
+        ) ++ stainlessTimeout.value.fold(Seq.empty[String]) { timeout =>
+          if (timeout < 0.0 || java.lang.Double.isNaN(timeout) || java.lang.Double.isInfinite(timeout))
+            sys.error(s"Invalid stainlessTimeout: $timeout. It must be a finite, non-negative number.")
+          else
+            Seq(s"-P:stainless:timeout:$timeout")
+        } ++ (
           // The stainless library uses qualified types (e.g. UInt31 in stainless.lang),
           // so its sources only parse with the experimental feature enabled.
           // These flags mirror the ones the stainless frontend passes (see DottyCompiler).
