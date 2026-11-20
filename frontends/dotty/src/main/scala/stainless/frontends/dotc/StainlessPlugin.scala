@@ -22,9 +22,14 @@ object StainlessPlugin {
   val PluginDescription                = "Inject Stainless verification pipeline"
   val EnableVerificationOptionName     = "verify:"
   val EnableGhostEliminationOptionName = "ghost-elim:"
+  val TimeoutOptionName                = "timeout:"
 }
 
-case class PluginOptions(enableVerification: Boolean, enableGhostElimination: Boolean)
+case class PluginOptions(
+  enableVerification: Boolean,
+  enableGhostElimination: Boolean,
+  timeout: Option[Double]
+)
 
 class StainlessPlugin extends StandardPlugin {
   import StainlessPlugin._
@@ -36,7 +41,7 @@ class StainlessPlugin extends StandardPlugin {
     val pluginOpts = parseOptions(options)
     List(
       if (pluginOpts.enableVerification)
-        Some(new ExtractionAndVerification)
+        Some(new ExtractionAndVerification(pluginOpts.timeout))
       else None,
       if (pluginOpts.enableGhostElimination)
         Some(new GhostAccessRewriter(if (pluginOpts.enableVerification) "stainless" else Pickler.name))
@@ -59,6 +64,8 @@ class StainlessPlugin extends StandardPlugin {
   private def parseOptions(options: List[String]): PluginOptions = {
     var enableVerification = false
     var enableGhostElimination = false
+    var timeout: Option[Double] = None
+
     for (option <- options) {
       if (option.startsWith(EnableVerificationOptionName)) {
         val value = option.substring(EnableVerificationOptionName.length)
@@ -72,8 +79,18 @@ class StainlessPlugin extends StandardPlugin {
           enableGhostElimination = value
         }
       }
+      else if (option.startsWith(TimeoutOptionName)) {
+        val value = option.substring(TimeoutOptionName.length)
+        value.toDoubleOption.foreach { seconds =>
+          if (seconds >= 0.0 && !seconds.isInfinity && !seconds.isNaN)
+            timeout = Some(seconds)}
+      }
     }
-    PluginOptions(enableVerification = enableVerification, enableGhostElimination = enableGhostElimination)
+    PluginOptions(
+      enableVerification = enableVerification,
+      enableGhostElimination = enableGhostElimination,
+      timeout = timeout
+      )
   }
 
   private def parseBoolean(str: String): Option[Boolean] =
@@ -83,7 +100,7 @@ class StainlessPlugin extends StandardPlugin {
       case _ => None
     }
 
-  private class ExtractionAndVerification extends PluginPhase {
+  private class ExtractionAndVerification(timeout: Option[Double]) extends PluginPhase {
     override val phaseName = "stainless"
     override val runsAfter = Set(Pickler.name)
     override val runsBefore = Set(FirstTransform.name)
@@ -109,10 +126,11 @@ class StainlessPlugin extends StandardPlugin {
       val inoxCtx = {
         val base = mainHelper.getConfigContext(inox.Options.empty)(using new stainless.PlainTextReporter(Set.empty))
         val adapter = new ReporterAdapter(base.reporter.debugSections)
+        val timeoutOptions = timeout.toSeq.map(seconds => inox.optTimeout(seconds))
         inox.Context(
           reporter         = adapter,
           interruptManager = new inox.utils.InterruptManager(adapter),
-          options          = base.options + inox.optTimeout(0.0),
+          options          = base.options ++ timeoutOptions,
           timers           = base.timers,
         )
       }
