@@ -27,7 +27,7 @@ trait MainHelpers extends inox.MainHelpers { self =>
     override def toString: String = "Equivalence checking"
   }
 
-  override protected def getOptions: Map[inox.OptionDef[?], Description] = super.getOptions - inox.solvers.optAssumeChecked ++ Map(
+  override protected def getOptions: Map[inox.OptionDef[?], Description] = super.getOptions - inox.solvers.optAssumeChecked - inox.solvers.optStringsBMP ++ Map(
     optVersion -> Description(General, "Display the version number"),
     optConfigFile -> Description(General, "Path to configuration file, set to false to disable (default: stainless.conf or .stainless.conf)"),
     optFunctions -> Description(General, "Only consider functions f1,f2,..."),
@@ -40,6 +40,8 @@ trait MainHelpers extends inox.MainHelpers { self =>
       extraction.phases.map { case (name, desc) => f"$nl  $name%-26s : $desc" }.mkString("")
     }),
     extraction.imperative.optFullImperative -> Description(Verification, "Use the full imperative phase. That might be unstable because it is still under development."),
+    extraction.imperative.optOldAliasing -> Description(Verification, "Use AntiAliasing, which rejects aliasing of mutable objects, instead of AssignmentRewrite."),
+    extraction.imperative.optHeapMaxChanges -> Description(Verification, "How many times the heap approximation of a program point may change before AssignmentRewrite reports that its analysis does not stabilize (default: 20)"),
     extraction.imperative.optCheckHeapContracts -> Description(Verification, "Check that heap reads and modifies clauses are valid"),
     evaluators.optCodeGen -> Description(Evaluators, "Use code generating evaluator"),
     codegen.optInstrumentFields -> Description(Evaluators, "Instrument ADT field access during code generation"),

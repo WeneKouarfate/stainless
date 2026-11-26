@@ -79,8 +79,14 @@ object EquivalenceCheckingComponent extends Component {
     inox.transformers.SymbolTransformer(new LoweringImpl(trees, trees))
   }
 
-  override def run(pipeline: StainlessPipeline)(using inox.Context): EquivalenceCheckingRun = {
-    new EquivalenceCheckingRun(pipeline)
+  override def run(pipeline: StainlessPipeline)(using ctx: inox.Context): EquivalenceCheckingRun = {
+    // Equivalence is extensional, so the checked programs compare functions extensionally, unless
+    // another function equality is selected
+    import inox.solvers.unrolling.{optFunctionEquality, FunctionEquality}
+    val equivCtx =
+      if (ctx.options.findOption(optFunctionEquality).isDefined) ctx
+      else ctx.withOpts(optFunctionEquality(FunctionEquality.Extensional))
+    new EquivalenceCheckingRun(pipeline)(using equivCtx)
   }
 }
 
@@ -241,7 +247,7 @@ class EquivalenceCheckingRun private(override val component: EquivalenceChecking
 
   private def counterExamples(analysis: VerificationAnalysis) = {
     analysis.vrs.collect {
-      case (vc, VCResult(VCStatus.Invalid(VCStatus.CounterExample(model)), _, _, _)) =>
+      case (vc, VCResult(VCStatus.Invalid(VCStatus.CounterExample(model)), _, _, _, _)) =>
         vc -> model
     }.toMap
   }

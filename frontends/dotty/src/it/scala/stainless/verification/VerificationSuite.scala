@@ -25,6 +25,10 @@ class VerificationSuite extends VerificationComponentTestSuite {
     Set(
       // Flaky
       "verification/valid/PackedFloat8",
+      // The buggyAdd postcondition counterexample depends on z3's random seed:
+      // replaying the same SMT session, half of the seeds find it in under a
+      // minute and the others run into the 300 s timeout.
+      "verification/invalid/RedBlackTree2",
     )
 
   private val ignoreCVC = ignoreCommon ++
@@ -47,6 +51,13 @@ class VerificationSuite extends VerificationComponentTestSuite {
 
   private val ignorePrincess = ignoreCommon ++
     Set(
+      // Times out: Princess heuristics get lost on the recursive law proof
+      "verification/valid/ListMonoidLaws",
+      // Arrays
+      "verification/valid/Exceptions4",
+      // Strings
+      "verification/valid/ExceptionMessages",
+      "verification/valid/JavaExceptionMessages",
       // valid/MicroTests
       "verification/valid/ADTWithArray1",
       "verification/valid/ADTWithArray2",
@@ -58,8 +69,7 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/Array3",
       "verification/valid/Array4",
       "verification/valid/ArrayUpdated",
-      "verification/valid/BitVectors2",
-      "verification/valid/BitVectors3",
+      "verification/valid/Unsigned2",
       "verification/valid/Issue803",
       "verification/valid/Monads3",
       "verification/valid/Nested13",
@@ -71,6 +81,7 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/FloatingPoints2",
       "verification/valid/FloatingPoints4",
       "verification/valid/FloatingPointFunctionProperties",
+      "verification/valid/FloatingPointMinMax",
 
       // valid/
       "verification/valid/ArraySlice",
@@ -86,6 +97,8 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/BitsTricksSlow",
       "verification/valid/BooleanOps",
       "verification/valid/BVMaxInterpret",
+      "verification/valid/CakeMixins",
+      "verification/valid/CakeSelfTypes",
       "verification/valid/Composition",
       "verification/valid/ConcRope",
       "verification/valid/ConcTree",
@@ -98,6 +111,10 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/FoolProofAdder",
       "verification/valid/FunctionMaps",
       "verification/valid/FunctionMapsObj",
+      "verification/valid/GenericInstanceTests", // Princess times out
+      "verification/valid/GenericOuters", // Princess times out
+      "verification/valid/GenericOutersInherited", // Princess times out
+      "verification/valid/GenericSortInvariants",
       "verification/valid/GodelNumbering",
       "verification/valid/Heaps",
       "verification/valid/HOInvocations2",
@@ -105,6 +122,8 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/i1379e",
       "verification/valid/i1379f",
       "verification/valid/i1379g",
+      "verification/valid/i1549",
+      "verification/valid/IndependentHierarchies", // Princess times out
       "verification/valid/InnerClasses4",
       "verification/valid/InnerClassesInvariants",
       "verification/valid/InsertionSort",
@@ -119,6 +138,7 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/valid/MapDiff",
       "verification/valid/MapGetOrElse2",
       "verification/valid/MapGetPlus",
+      "verification/valid/MemberClasses1", // Princess overflows its stack
       "verification/valid/MergeSort",
       "verification/valid/MergeSort2",
       "verification/valid/Monotonicity",
@@ -170,12 +190,18 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/invalid/FiniteSort",
       "verification/invalid/Float8",
       "verification/invalid/ForallAssoc",
+      "verification/invalid/GenericOuters", // Princess overflows its stack
+      "verification/invalid/GenericSortInvariants",
       "verification/invalid/Generics2",
       "verification/invalid/HiddenOverride",
       "verification/invalid/HOInvocations",
       "verification/invalid/i497",
+      "verification/invalid/OpaqueExternClasses", // Princess returns unknown with opaque fields
+      // Princess's counterexample does not pass --check-models
+      "verification/invalid/i665",
       "verification/invalid/i1295",
       "verification/invalid/i1379c",
+      "verification/invalid/i1506",
       "verification/invalid/InductTacticTest",
       "verification/invalid/InsertionSort",
       "verification/invalid/IntSet",
@@ -186,6 +212,7 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/invalid/LawsExampleInvalid",
       "verification/invalid/ListOperations",
       "verification/invalid/Lists",
+      "verification/invalid/MemberClassesMixing", // Princess overflows its stack
       "verification/invalid/MyTuple3",
       "verification/invalid/Nested15",
       "verification/invalid/Overrides",
@@ -201,14 +228,9 @@ class VerificationSuite extends VerificationComponentTestSuite {
       "verification/invalid/FloatNonProperties",
       "verification/invalid/FloatNonAssociativity",
       "verification/invalid/FloatingPointFunctionsContradiction",
-
-      // false-valid/ (for greater good...)
-      "verification/false-valid/ForestNothing2",
     )
 
   private val ignoreCodegen = Set(
-    // Does not work with --feeling-lucky. See #490
-    "verification/valid/MsgQueue",
     // assertion failed in `compileLambda`
     "verification/valid/GodelNumbering",
     // codegen for floating-point <-> ieee bit-representation conversions not implemented

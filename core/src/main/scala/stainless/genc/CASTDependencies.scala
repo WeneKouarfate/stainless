@@ -53,11 +53,20 @@ class CASTTraverser(using ctx: inox.Context) {
     case Block(exprs) =>
       exprs
 
+    case Labeled(_, block) =>
+      Seq(block)
+
     case Lit(lit) =>
       Seq()
 
     case EnumLiteral(lit) =>
       Seq()
+
+    case MemSet(pointer, value, size) =>
+      Seq(pointer, value, size)
+
+    case SizeOf(tpe) =>
+      Seq(tpe)
 
     case Decl(id, typ, None) =>
       Seq(id, typ)
@@ -85,9 +94,6 @@ class CASTTraverser(using ctx: inox.Context) {
 
     case Binding(id) =>
       Seq(id)
-
-    case FieldAccess(Deref(obj), fieldId) =>
-      Seq(obj, fieldId)
 
     case FieldAccess(obj, fieldId) =>
       Seq(obj, fieldId)
@@ -118,6 +124,9 @@ class CASTTraverser(using ctx: inox.Context) {
 
     case While(cond, body) =>
       Seq(cond, body)
+
+    case Goto(_) =>
+      Seq()
 
     case Break =>
       Seq()
@@ -161,6 +170,9 @@ object CASTDependencies {
       typeCollector.traverse(returnType)
       params.foreach(typeCollector.traverse)
     }
+
+    // Types of exported globals (defined or declared in the header)
+    prog.decls.collect { case (Decl(_, typ, _), modes) if modes.contains(Export) => typ }.foreach(typeCollector.traverse)
 
     for (tpe <- prog.typeDefs.filter(_.isExported)) typeCollector.traverse(tpe)
     for (tpe <- prog.types.filter(_.isExported)) typeCollector.traverse(tpe)

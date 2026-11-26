@@ -40,6 +40,9 @@ package object methods {
   }
 
   def extractor(using inox.Context) = {
+    utils.NamedPipeline("AbstractMethods", AbstractMethods(trees)) `andThen`
+    utils.NamedPipeline("InternallyMutableFields", InternallyMutableFields(trees)) `andThen`
+    utils.NamedPipeline("ObservationallyPureCalls", ObservationallyPureCalls(trees)) `andThen`
     utils.NamedPipeline("Laws",            Laws(trees))            `andThen`
     utils.NamedPipeline("SuperInvariants", SuperInvariants(trees)) `andThen`
     utils.NamedPipeline("SuperCalls",      SuperCalls(trees))      `andThen`

@@ -26,9 +26,18 @@ package object extraction {
   val phases: Seq[(String, String)] = Seq(
     "UserFiltering"             -> "Remove all the library functions not used by the user",
     "Preprocessing"             -> "A preprocessing phase before the pipeline",
+    "ConcreteParents"           -> "Make extended concrete classes abstract",
+    "Mixins"                    -> "Resolve mixin composition and super calls within traits",
+    "SelfTypes"                 -> "Cast this to the self type of its class",
+    "MemberClasses"             -> "Encode the path-dependent types of member classes as refinements",
+    "OuterIdentities"           -> "Assign identities to instances of classes with member classes",
+    "ConstructsUsage"           -> "Collect uses of `choose`, `@extern` and `???` for the summary report",
     "PartialFunctions"          -> "Lift partial function preconditions",
     "XlangLowering"             -> "Lowering phase at the end of xlang phases",
     "InnerClasses"              -> "Lift inner classes",
+    "AbstractMethods"           -> "Check the use of AbstractMethodBody(), the body of abstract methods with a specification",
+    "InternallyMutableFields"   -> "Check that @internallyMutable fields are only accessed by allowed methods, and not compared by equality",
+    "ObservationallyPureCalls"  -> "Replace calls to observationally pure methods by their pure reference function",
     "Laws"                      -> "Rewrite laws as abstract functions with contracts",
     "SuperInvariants"           -> "Ensure super class invariant cannot be weakened in subclasses",
     "SuperCalls"                -> "Resolve super-function calls",
@@ -36,9 +45,15 @@ package object extraction {
     "MethodLifting"             -> "Lift methods into dispatching functions",
     "MergeInvariants"           -> "Merge all class invariants into a single method",
     "ValueClasses"              -> "Erase value classes",
-    "ExceptionLifting"          -> "Removes all throw statements, and replaces them with an assertion with false condition",
+    "MethodsLowering"           -> "Lowering phase at the end of methods phases",
+    "ExceptionLifting"          -> "Lift exceptions into result values of the functions with a `throwing` clause",
     "FieldAccessors"            -> "Inline field accessors of concrete classes",
+    "SameAsLowering"            -> "Lower `sameAs` postconditions of observationally pure functions to equalities",
     "EffectElaboration"         -> "Transform all side-effectful operations into mutable map updates",
+    "EffectsCheck"              -> "Check that effects only occur where allowed: purity, specifications, refinements and type parameters",
+    "FunctionRewrite"           -> "Rewrite function/lambda signatures and call-sites to make aliasing effects explicit",
+    "ConditionalHoisting"       -> "Hoist if conditions into variables and lower matches into if-chains with hoisted case conditions",
+    "AssignmentRewrite"         -> "Inject refresh assignments for known-aliased variables after mutations",
     "AntiAliasing"              -> "Rewrite field and array mutations",
     "ReturnElimination"         -> "Eliminate `return` expressions",
     "ImperativeCodeElimination" -> "Eliminate while loops and assignments",
@@ -47,6 +62,7 @@ package object extraction {
     "AdtSpecialization"         -> "Specialize classes into ADTs (when possible)",
     "TypeEncoding"              -> "Encode non-ADT types",
     "FunctionClosure"           -> "Lift inner functions",
+    "DispatchFlattening"        -> "Flatten method dispatches",
     "FunctionSpecialization"    -> "Specialize functions",
     "UnfoldOpaque"              -> "Injects equality assumption with inlined call for calls wrapped in unfold keyword",
     "CallSiteInline"            -> "Call-side inline for calls wrapped in inline keyword",
@@ -61,14 +77,15 @@ package object extraction {
     "PartialEvaluation"         -> "Partially evaluate marked function calls",
     "AssertionInjector"         -> "Insert assertions which verify array accesses, casts, division by zero, etc.",
 
-    "ComputeDependencies"       -> "(GenC) Compute the dependencies of a given definition",
     "ComputeFunCtx"             -> "(GenC) Compute the context of each given function definition",
     "GhostElimination"          -> "(GenC) Remove ghost code",
+    "TrimSymbols"               -> "(GenC) Keep only the definitions that exported functions depend on",
     "Scala2IR"                  -> "(GenC) Convert the Stainless AST into GenC's IR",
     "StructInlining"            -> "(GenC) Inline structs which have just one member",
     "Normalisation"             -> "(GenC) Normalise IR to match the C execution model",
     "Lifting"                   -> "(GenC) Lift class types to their hierarchy top class",
     "Referencing"               -> "(GenC) Add 'referencing' to the input LIR program to produce a RIR program",
+    "TailRecElim"               -> "(GenC) Rewrite tail-recursive functions into loops",
     "IR2C"                      -> "(GenC) From IR to C",
   )
 
@@ -208,6 +225,11 @@ package object extraction {
           val program: self.program.type
           type S <: inox.solvers.combinators.TimeoutSolver { val program: self.program.type }
         } = solvers.SolverFactory.getFromSettings(self.program, ctx)(encoder)(using self.asInstanceOf[self.program.Semantics])
+
+        override protected def createSolver(ctx: inox.Context, model: self.program.Model): inox.solvers.SolverFactory {
+          val program: self.program.type
+          type S <: inox.solvers.combinators.TimeoutSolver { val program: self.program.type }
+        } = solvers.SolverFactory.getFromSettings(self.program, ctx, Some(model))(encoder)(using self.asInstanceOf[self.program.Semantics])
 
         protected def createEvaluator(ctx: inox.Context): inox.evaluators.DeterministicEvaluator {
           val program: self.program.type

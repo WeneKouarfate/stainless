@@ -164,6 +164,50 @@ These options are available to all Stainless components:
   repair one function (in sec.) When using the ``--eval`` component, one
   should use ``--max-calls`` instead.
 
+* ``--z3-rlimit=n`` and ``--cvc5-rlimit=n``
+
+  Set a resource limit for the solvers that run on z3 (``nativez3``, the default,
+  ``smt-z3``, ``unrollz3`` and their variants), resp. for ``smt-cvc5``, as a
+  deterministic alternative to ``--timeout``: unlike a wall-clock timeout, the
+  outcome does not depend on the machine or its load. The limit ``n`` is given in
+  millions of solver resource units (``--z3-rlimit=2`` passes ``rlimit=2000000``
+  to z3), and ``0`` (the default) means no limit. z3 accepts at most
+  ``--z3-rlimit=4294``; larger values are capped. A verification condition that
+  exceeds the limit is reported as ``resource limit reached``.
+
+  The limit applies to each solver query separately, not to a whole verification
+  condition: Stainless typically issues many queries per verification condition
+  while unfolding recursive functions, and the condition is given up as soon as
+  a single query exceeds the limit. How long a given limit takes therefore
+  depends on the program, so it should be calibrated for the programs at hand.
+
+  Since only individual queries are bounded, a verification condition whose
+  queries all stay below the limit may in principle run forever (in practice,
+  queries usually grow with each unfolding until one exceeds the limit). To bound
+  the total work, combine the resource limit with ``--unroll-bound=n``, which
+  caps the number of unfolding steps and keeps the outcome deterministic; a
+  verification condition that reaches the bound is reported as ``unroll bound
+  reached``. Alternatively, add ``--timeout`` as a wall-clock safety net.
+
+  To help choose a limit, the verification summary has a ``resources (M)``
+  column, after the time. To check one verification condition, Stainless sends
+  several queries to the solver while unfolding; the column shows the resources
+  used by the most expensive of these queries, in millions of units (rounded
+  up). This is the same unit as the limit, so the value shown can be given as
+  the limit.
+
+  Resources are only shown for the solvers that run on z3 (``nativez3``,
+  ``smt-z3``, ``unrollz3`` and their variants) and for ``smt-cvc5``. Nothing
+  else is counted: the cell is empty for the other solvers (``eval``,
+  ``princess``, ``smt-cvc4``, ...), for the conditions that need no solver
+  (trivial, or found in the cache), and when no solver of a portfolio answered.
+  With a portfolio, the value is that of the solver that answered.
+
+  A condition that reached the limit shows that limit (cvc5 may show slightly
+  more, as it does not stop at once). The JSON report (``--json``) has the same
+  value in units (``resourceUsage``), and the usage of each query
+  (``resources``).
+
 * ``--cache``
 
   Use persistent cache on disk to save the state of the verification and/or
@@ -214,10 +258,10 @@ Verification
 * ``--strict-aritmetic``
 
   Check arithmetic operations for unintended behaviour and
-  overflows.  Note that reasoning about bitvectors is sound
-  even if this option is false, but in that case no warnings
-  are generated for overflows and underflows because these
-  have well-defined semantics in Scala.
+  overflows.  Note that reasoning about fixed-width integers
+  (signed or unsigned) is sound even if this option is false,
+  but in that case no warnings are generated for overflows and
+  underflows because these have well-defined semantics in Scala.
 
 * ``--vc-cache``
 
@@ -382,8 +426,8 @@ may contain:
    stainless/lang/Bag.scala
    stainless/lang/Map.scala
    stainless/collection/List.scala
-   stainless/math/BitVectors.scala
    stainless/math/Nat.scala
+   stainless/math/Unsigned.scala
    stainless/math/package.scala
    stainless/io/StdIn.scala
    stainless/io/package.scala

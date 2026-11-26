@@ -54,8 +54,8 @@ trait VerificationCache extends VerificationChecker { self =>
     //      that the event is rare enough and therefore will not result in huge cache files.
 
     val (time, tryResult) = timers.verification.cache.runAndGetTime {
-      val (canonicalSymbols, canonicalExpr): (Symbols, Expr) =
-        utils.Canonization(program)(program.symbols, vc.condition)
+      val (canonicalSymbols, canonicalExpr) =
+        utils.Canonization(program)(program.symbols, vc.condition): (Symbols, Expr)
 
 
       val serialized = serializer.serialize((vc.satisfiability, canonicalSymbols, canonicalExpr))
@@ -102,7 +102,7 @@ trait VerificationCache extends VerificationChecker { self =>
     // Update the result with the correct processing time
     tryResult match {
       case Failure(e) => reporter.internalError(e)
-      case Success(VCResult(status, solver, _, smtLibFileId)) => VCResult(status, solver, Some(time), smtLibFileId)
+      case Success(result) => result.copy(time = Some(time))
     }
   }
 }

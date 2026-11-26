@@ -134,6 +134,30 @@ trait ASTExtractors {
 
   protected lazy val exceptionSym = classFromName("stainless.lang.Exception")
 
+  /** The Java exceptions that are extracted as Stainless library classes (see `stainless/lang/JavaExceptions.scala`).
+    *
+    * They are looked up only if defined, as the library may not be part of the compiled program.
+    */
+  protected lazy val javaExceptions: Map[Symbol, ClassSymbol] = {
+    val named = Seq(
+      "java.lang.RuntimeException",
+      "java.lang.IllegalArgumentException",
+      "java.lang.IllegalStateException",
+      "java.lang.UnsupportedOperationException",
+      "java.lang.ArithmeticException",
+      "java.lang.IndexOutOfBoundsException",
+      "java.util.NoSuchElementException",
+    ).map(java => java -> ("stainless.lang." + java.split('.').last))
+    val all = Seq(
+      "java.lang.Throwable" -> "stainless.lang.Exception",
+      "java.lang.Exception" -> "stainless.lang.Exception",
+    ) ++ named
+    all.flatMap { (java, stainless) =>
+      val (javaSym, stainlessSym) = (getClassIfDefined(java), getClassIfDefined(stainless))
+      if (javaSym.exists && stainlessSym.exists) Some(javaSym -> stainlessSym.asClass) else None
+    }.toMap
+  }
+
   protected lazy val setSym         = classFromName("stainless.lang.Set")
   protected lazy val mapSym         = classFromName("stainless.lang.Map")
   protected lazy val mutableMapSym  = classFromName("stainless.lang.MutableMap")
@@ -141,7 +165,23 @@ trait ASTExtractors {
   protected lazy val realSym        = classFromName("stainless.lang.Real")
    protected lazy val cellSym       = classFromName("stainless.lang.Cell")
 
-  protected lazy val bvSym          = classFromName("stainless.math.BitVectors.BV")
+  protected lazy val unsignedModuleClass = moduleFromName("stainless.math.Unsigned").moduleClass
+  private lazy val unsignedTypeNames = Seq("UByte" -> 8, "UShort" -> 16, "UInt" -> 32, "ULong" -> 64)
+  /** The opaque types `UByte`, `UShort`, `UInt` and `ULong` of `stainless.math.Unsigned`, with their size. */
+  protected lazy val unsignedTypeSyms: Map[Symbol, Int] = unsignedTypeNames.map { (name, size) =>
+    unsignedModuleClass.info.decl(typeName(name)).symbol -> size
+  }.toMap
+  /** The (module classes of the) companion objects of these types, with the size of the type. */
+  protected lazy val unsignedCompanionSyms: Map[Symbol, Int] = unsignedTypeNames.map { (name, size) =>
+    unsignedModuleClass.info.decl(termName(name)).symbol.moduleClass -> size
+  }.toMap
+  /** The `@extern` functions of `stainless.math.UnsignedStrings` that stand for `toStringUnsigned`, by size. */
+  protected lazy val unsignedToStringSyms: Map[Int, Symbol] = {
+    val stringsModuleClass = moduleFromName("stainless.math.UnsignedStrings").moduleClass
+    unsignedTypeNames.map { (name, size) =>
+      size -> stringsModuleClass.info.decl(termName(name.toLowerCase + "ToString")).symbol
+    }.toMap
+  }
 
   protected lazy val optionSymbol = classFromName("stainless.lang.Option")
   protected lazy val someSymbol   = classFromName("stainless.lang.Some")
@@ -214,10 +254,6 @@ trait ASTExtractors {
     }
   }
 
-  def isBVSym(sym: Symbol) : Boolean = {
-    getResolvedTypeSym(sym) == bvSym
-  }
-
   def isAnySym(sym: Symbol) : Boolean = {
     getResolvedTypeSym(sym) == scalaAnySym
   }
@@ -273,6 +309,12 @@ trait ASTExtractors {
   }
 
   def hasBigIntType(t: tpd.Tree) = isBigIntSym(t.tpe.typeSymbol)
+
+  /** Whether `t` is an `Int` or a `Long`, including a union of their literal types, such as the type of
+    * `if c then 1 else 0`.
+    */
+  def hasIntOrLongType(t: tpd.Tree): Boolean =
+    (t.tpe frozen_<:< defn.IntType) || (t.tpe frozen_<:< defn.LongType)
 
   def hasStringType(t: tpd.Tree) = isStringSym(t.tpe.typeSymbol)
 
@@ -864,45 +906,16 @@ trait ASTExtractors {
   }
 
   object StructuralExtractors {
-    object FrontendBVType {
-      val R = """type (UInt|Int)(\d+)""".r
-
-      def unapply(tpe: Type): Option[(Boolean, Int)] = {
-        tpe.stripTypeVar match {
-          case AppliedType(tr: TypeRef, FrontendBVKind(signed, size) :: Nil) if isBVSym(tr.symbol) =>
-            Some((signed, size))
-          case tr: TypeRef if isBVSym(tr.symbol) =>
-            tr.symbol.toString match {
-              case R(signed, size) =>
-                Some((signed == "Int", size.toInt))
-              case _ =>
-                None
-            }
-          case _ => FrontendBVKind.unapply(tpe)
-        }
+    /** The unsigned types of `stainless.math.Unsigned`, with their size. They are opaque aliases of the signed
+      * types of the same size, which must not be dealiased: Stainless maps them to unsigned bitvector types.
+      */
+    object FrontendUnsignedType {
+      def unapply(tpe: Type): Option[Int] = tpe.stripTypeVar match {
+        case tr: TypeRef => unsignedTypeSyms.get(tr.symbol)
+        case _ => None
       }
 
-      def unapply(tr: tpd.Tree): Option[(Boolean, Int)] = unapply(tr.tpe)
-    }
-
-    object FrontendBVKind {
-      val R = """object ([ui])(\d+)""".r
-
-      def unapply(tpe: Type): Option[(Boolean, Int)] = {
-        tpe.stripTypeVar match {
-          case tr: TermRef =>
-            tr.symbol.toString match {
-              case R(signed, size) =>
-                Some((signed == "i", size.toInt))
-              case _ =>
-                None
-            }
-          case _ =>
-            None
-        }
-      }
-
-      def unapply(tr: tpd.Tree): Option[(Boolean, Int)] = unapply(tr.tpe)
+      def unapply(tr: tpd.Tree): Option[Int] = unapply(tr.tpe)
     }
 
     object ExObjectDef {
@@ -1349,22 +1362,25 @@ trait ASTExtractors {
             Literal(Constant(()))
           )
         ) =>
-          args match {
+          args.map(stripInlineMarkers) match {
             case List(Literal(cnst: Constant)) => Some((body, Some(cnst.stringValue), false))
             case _ => Some((body, None, false))
           }
 
         // This case can happen if we have an assert(expr) where expr can be reduced to false at compile-time.
+        // The condition takes the position of the assertion, which its verification condition reports.
         case Inlined(
           Ident(ExNamed("Predef$")) | Apply(Ident(ExNamed("assert")), _),
           Nil,
           Apply(ExSymbol("scala", "runtime", "Scala3RunTime$", "assertFailed"), args)
         ) =>
-          args match {
-            case List(Literal(cnst: Constant)) => Some((tpd.Literal(Constant(false)), Some(cnst.stringValue), false))
-            case _ => Some((tpd.Literal(Constant(false)), None, false))
+          val cond = tpd.Literal(Constant(false)).withSpan(tree.span)
+          args.map(stripInlineMarkers) match {
+            case List(Literal(cnst: Constant)) => Some((cond, Some(cnst.stringValue), false))
+            case _ => Some((cond, None, false))
           }
 
+        // Scala 3 does not inline the calls to Scala's assert in the body of an inline method.
         case Apply(ExSymbol("scala", "Predef$", "assert"), Seq(body)) =>
           Some((body, None, false))
 
@@ -1523,6 +1539,14 @@ trait ASTExtractors {
       }
     }
 
+    object ExSameAsExpression {
+      def unapply(tree: tpd.Apply): Option[tpd.Tree] = tree match {
+        case Apply(TypeApply(ExSymbol("stainless", "lang", "package$", "sameAs"), Seq(_)), Seq(arg)) => Some(arg)
+        case _ => None
+      }
+    }
+
+
     object ExSnapshotExpression {
       def unapply(tree: tpd.Apply): Option[tpd.Tree] = tree match {
         case Apply(TypeApply(ExSymbol("stainless", "lang", "package$", "snapshot"), Seq(_)), Seq(arg)) => Some(arg)
@@ -1539,119 +1563,36 @@ trait ASTExtractors {
       }
     }
 
-    /** Matches the construct int2bigInt(a) and returns a */
+    /** Matches the implicit conversions `int2bigInt(a)` and `long2bigInt(a)`, and returns `a`. */
     object ExIntToBigInt {
       def unapply(tree: tpd.Tree): Option[tpd.Tree] = tree match {
-        case Apply(ExSymbol("scala", "math", "BigInt$", "int2bigInt"), List(t)) => Some(t)
+        case Apply(ExSymbol("scala", "math", "BigInt$", "int2bigInt" | "long2bigInt"), List(t)) => Some(t)
         case _ => None
       }
     }
 
-    /** `intToBV` extraction */
-    object ExIntToBV {
-      def unapply(tree: tpd.Tree): Option[(tpd.Tree, tpd.Tree)] = tree  match {
-        case Apply(
-          TypeApply(
-            ExSymbol("stainless", "math", "BitVectors$", "intToBV"),
-            typ :: Nil
-          ), n :: Nil
-        ) =>
-          Some((typ, n))
-        case _ =>
-          None
+    /** `MinValue` and `MaxValue` of the unsigned types: `(size, isMax)`. */
+    object ExUnsignedMinMax {
+      def unapply(tree: tpd.Tree): Option[(Int, Boolean)] = tree match {
+        case _: (tpd.Ident | tpd.Select) if unsignedCompanionSyms.contains(tree.symbol.owner) =>
+          tree.symbol.name.toString match {
+            case "MinValue" => Some((unsignedCompanionSyms(tree.symbol.owner), false))
+            case "MaxValue" => Some((unsignedCompanionSyms(tree.symbol.owner), true))
+            case _ => None
+          }
+        case _ => None
       }
     }
 
-    /** `bigIntToBV` extraction */
-    object ExBigIntToBV {
-      def unapply(tree: tpd.Tree): Option[(Boolean, Int, tpd.Tree)] = tree  match {
-        case Apply(
-          TypeApply(
-          ExSymbol("stainless", "math", "BitVectors$", "bigIntToBV"),
-            FrontendBVKind(signed, size) :: Nil
-          ), n :: Nil
-        ) =>
-          Some((signed, size, n))
-        case _ =>
-          None
-      }
-    }
-
-    /** `max` extraction for bitvectors */
-    object ExMaxBV {
-      def unapply(tree: tpd.Tree): Option[(Boolean, Int)] = tree  match {
-        case TypeApply(
-        ExSymbol("stainless", "math", "BitVectors$", "max"),
-          FrontendBVType(signed, size) :: Nil
-        ) =>
-          Some((signed, size))
-        case _ =>
-          None
-      }
-    }
-
-    /** `min` extraction for bitvectors */
-    object ExMinBV {
-      def unapply(tree: tpd.Tree): Option[(Boolean, Int)] = tree  match {
-        case TypeApply(
-        ExSymbol("stainless", "math", "BitVectors$", "min"),
-          FrontendBVType(signed, size) :: Nil
-        ) =>
-          Some((signed, size))
-        case _ =>
-          None
-      }
-    }
-
-    /** `fromByte` extraction (Byte to Int8 identity conversion) */
-    object ExFromByte {
-      def unapply(tree: tpd.Tree): Option[tpd.Tree] = tree  match {
-        case Apply(
-          ExSymbol("stainless", "math", "BitVectors$", "fromByte"),
-          expr :: Nil
-        ) =>
-          Some(expr)
-        case _ =>
-          None
-      }
-    }
-
-    /** `fromShort` extraction (Short to Int16 identity conversion) */
-    object ExFromShort {
-      def unapply(tree: tpd.Tree): Option[tpd.Tree] = tree  match {
-        case Apply(
-          ExSymbol("stainless", "math", "BitVectors$", "fromShort"),
-          expr :: Nil
-        ) =>
-          Some(expr)
-        case _ =>
-          None
-      }
-    }
-
-    /** `fromInt` extraction (Int to Int32 identity conversion) */
-    object ExFromInt {
-      def unapply(tree: tpd.Tree): Option[tpd.Tree] = tree  match {
-        case Apply(
-          ExSymbol("stainless", "math", "BitVectors$", "fromInt"),
-          expr :: Nil
-        ) =>
-          Some(expr)
-        case _ =>
-          None
-      }
-    }
-
-    /** `fromLong` extraction (Long to Int64 identity conversion) */
-    object ExFromLong {
-      def unapply(tree: tpd.Tree): Option[tpd.Tree] = tree  match {
-        case Apply(
-          ExSymbol("stainless", "math", "BitVectors$", "fromLong"),
-          expr :: Nil
-        ) =>
-          Some(expr)
-        case _ =>
-          None
+    /** A call to an extension method of `stainless.math.Unsigned`: an operation on an unsigned type (defined in
+      * its companion object), or a conversion from a signed type to an unsigned type: `(method, receiver, args)`.
+      */
+    object ExUnsignedExtensionCall {
+      def unapply(tree: tpd.Tree): Option[(Symbol, tpd.Tree, Seq[tpd.Tree])] = tree match {
+        case ExCall(None, sym, Nil, receiver +: args)
+          if (sym `is` ExtensionMethod) && (unsignedCompanionSyms.contains(sym.owner) || sym.owner == unsignedModuleClass) =>
+          Some((sym, receiver, args))
+        case _ => None
       }
     }
 
@@ -1757,25 +1698,6 @@ trait ASTExtractors {
       def unapply(tree: tpd.Apply): Option[(tpd.Tree, tpd.Tree, tpd.Tree)] = tree match {
         case Apply(Apply(Apply(TypeApply(ExSymbol("scala", "Array$", "fill"), List(baseType)), List(length)), List(dflt)), _) =>
           Some((baseType, length, dflt))
-
-        case _ => None
-      }
-    }
-
-    object ExArrayApplyBV {
-      def unapply(tree: tpd.Apply): Option[(tpd.Tree, tpd.Tree, tpd.Tree)] = tree match {
-        case Apply(TypeApply(
-          Select(
-            Apply(
-              TypeApply(ExSymbol("stainless", "math", "BitVectors$", "ArrayIndexing"), tpe :: Nil),
-              array :: Nil
-            ),
-            ExNamed("apply")
-          ),
-          bvType :: Nil),
-          index :: Nil) =>
-
-          Some((array, bvType, index))
 
         case _ => None
       }

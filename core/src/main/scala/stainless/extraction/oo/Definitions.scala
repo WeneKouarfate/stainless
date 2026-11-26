@@ -38,11 +38,18 @@ trait Definitions extends innerfuns.Trees { self: Trees =>
       allAncestors.map(_.cd).distinct.map(typedMap)
     }
 
-    def children(using s: Symbols): Seq[ClassDef] =
-      s.classes.values.filter(_.parents.exists(_.id == id)).toSeq
+    /** The linearization of this class, in which Scala looks for the implementation of its members:
+      * for `C extends P1 with ... with Pn`, `C` followed by the linearizations of `Pn`, ..., `P1`,
+      * where only the last occurrence of each class is kept. */
+    def linearization(using s: Symbols): Seq[ClassDef] =
+      this +: parents.flatMap(ct => s.lookupClass(ct.id)).foldLeft(Seq.empty[ClassDef]) { (acc, p) =>
+        val l = p.linearization
+        l.filterNot(c => acc.exists(_.id == c.id)) ++ acc
+      }
 
-    def descendants(using s: Symbols): Seq[ClassDef] =
-      children.flatMap(cd => cd +: cd.descendants).distinct
+    def children(using s: Symbols): Seq[ClassDef] = s.childrenOf(id)
+
+    def descendants(using s: Symbols): Seq[ClassDef] = s.descendantsOf(id)
 
     def typeMembers(using s: Symbols): Seq[SymbolIdentifier] =
       s.typeDefs.values
@@ -195,6 +202,26 @@ trait Definitions extends innerfuns.Trees { self: Trees =>
     val classes: Map[Identifier, ClassDef]
     val typeDefs: Map[Identifier, TypeDef]
 
+    // The children of each class, in the order of `classes`, see `ClassDef.children`
+    private lazy val childrenMap: Map[Identifier, Seq[ClassDef]] =
+      classes.values.toSeq
+        .flatMap(cd => cd.parents.map(_.id).distinct.map(_ -> cd))
+        .groupMap(_._1)(_._2)
+
+    private[oo] def childrenOf(id: Identifier): Seq[ClassDef] = childrenMap.getOrElse(id, Seq.empty)
+
+    private val descendantsCache = new scala.collection.concurrent.TrieMap[Identifier, Seq[ClassDef]]
+
+    private[oo] def descendantsOf(id: Identifier): Seq[ClassDef] =
+      descendantsCache.getOrElseUpdate(id, childrenOf(id).flatMap(cd => cd +: descendantsOf(cd.id)).distinct)
+
+    // The frontend and the extraction caches ask for the dependencies of every function, which would
+    // otherwise recompute a transitive closure each time
+    private val dependenciesCache = new scala.collection.concurrent.TrieMap[Identifier, Set[Identifier]]
+
+    override def dependencies(from: Identifier): Set[Identifier] =
+      dependenciesCache.getOrElseUpdate(from, super.dependencies(from))
+
     private val typedClassCache: MutableMap[(Identifier, Seq[Type]), Option[TypedClassDef]] = MutableMap.empty
     def lookupClass(id: Identifier): Option[ClassDef] = classes.get(id)
     def lookupClass(id: Identifier, tps: Seq[Type]): Option[TypedClassDef] = {
@@ -265,7 +292,7 @@ trait Definitions extends innerfuns.Trees { self: Trees =>
         throw NotWellFormedException(cd, Some(s"the parent ${pcd.id} of class ${cd.id} is not well typed."))
       }
 
-      cd.parents.find(!_.tcd.cd.flags.contains(IsAbstract)).foreach { pcd =>
+      cd.parents.find(p => !p.tcd.cd.flags.exists(f => f == IsAbstract || f == IsExtensible)).foreach { pcd =>
         throw NotWellFormedException(cd,
           Some(s"a concrete class (${pcd.id}) cannot be extended (by ${cd.id}).")
         )
@@ -320,6 +347,8 @@ trait Definitions extends innerfuns.Trees { self: Trees =>
 
   case object IsInvariant extends Flag("invariant", Seq.empty)
   case object IsAbstract extends Flag("abstract", Seq.empty)
+  /** A concrete class that may be extended (see [[xlang.ConcreteParents]]). */
+  case object IsExtensible extends Flag("extensible", Seq.empty)
   case object IsSealed extends Flag("sealed", Seq.empty)
   case object IsCaseObject extends Flag("caseObject", Seq.empty)
   case class Bounds(lo: Type, hi: Type) extends Flag("bounds", Seq(lo, hi))

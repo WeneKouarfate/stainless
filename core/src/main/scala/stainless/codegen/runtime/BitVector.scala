@@ -49,10 +49,11 @@ final class BitVector(private val signed: Boolean, private val bits: Array[Boole
   def mult(that: BitVector): BitVector = new BitVector(signed, toBigInteger.multiply(that.toBigInteger), size)
   def div(that: BitVector): BitVector = new BitVector(signed, toBigInteger.divide(that.toBigInteger), size)
   def rem(that: BitVector): BitVector = new BitVector(signed, toBigInteger.remainder(that.toBigInteger), size)
+  // SMT-LIB's `bvsmod` (or `bvurem`), whose result has the sign of the divisor
   def mod(that: BitVector): BitVector = new BitVector(signed, {
     val (bi, tbi) = (toBigInteger, that.toBigInteger)
-    if (tbi.compareTo(BigInteger.ZERO) < 0) bi.mod(tbi.negate)
-    else bi.mod(tbi)
+    val r = bi.mod(tbi.abs)
+    if (tbi.signum < 0 && r.signum != 0) r.add(tbi) else r
   }, size)
 
   def not: BitVector = new BitVector(signed, bits map (!_))
@@ -65,11 +66,12 @@ final class BitVector(private val signed: Boolean, private val bits: Array[Boole
     new BitVector(signed, toBigInteger.shiftLeft(shift), size)
   }
 
+  // Logical shift: the vacated most significant bits are filled with zeros
   def lShiftRight(that: BitVector): BitVector = {
     val shift = (that.toUnsigned.toBigInteger `min` new BigInteger(size.toString)).intValueExact
-    val msbBits = (0 until shift) map { _ => bits.head }
+    val zeroBits = (0 until shift) map { _ => false }
     val remainings = bits.dropRight(shift).toSeq
-    val newBits = msbBits ++ remainings
+    val newBits = zeroBits ++ remainings
     assert(newBits.length == size)
     new BitVector(signed, newBits.toArray)
   }
@@ -80,11 +82,12 @@ final class BitVector(private val signed: Boolean, private val bits: Array[Boole
     new BitVector(signed, toBigInteger.shiftRight(shift), size)
   }
 
-  // Apply sign extension when growing, simply drop bits when shrinking
+  // Apply sign extension (signed) or zero extension (unsigned) when growing, simply drop bits when shrinking
   def cast(newSize: Int): BitVector = {
     val newBits: Seq[Boolean] =
-      if (newSize > size) ((size to newSize) map { _ => bits.head }) ++ bits
+      if (newSize > size) Seq.fill(newSize - size)(signed && bits.head) ++ bits
       else bits.toIndexedSeq.drop(size - newSize)
+    assert(newBits.length == newSize)
     new BitVector(signed, newBits.toArray)
   }
 

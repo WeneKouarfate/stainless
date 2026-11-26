@@ -3,7 +3,7 @@ package stainless
 package extraction
 package methods
 
-import inox.utils.Position
+import inox.utils.{NoPosition, Position}
 
 class MethodLifting(override val s: Trees, override val t: oo.Trees)
                    (using override val context: inox.Context)
@@ -111,9 +111,58 @@ class MethodLifting(override val s: Trees, override val t: oo.Trees)
         }
         val cid = symbols.getFunction(id).flags.collectFirst { case s.IsMethodOf(cid) => cid }.get
         val tcd = (ct.tcd +: ct.tcd.ancestors).find(_.id == cid).get
-        t.FunctionInvocation(id, (tcd.tps ++ tps) map transform, (rec +: args) map transform).copiedFrom(e)
+        rootCall(e, rec, id, tps, args, ct).getOrElse(
+          t.FunctionInvocation(id, (tcd.tps ++ tps) map transform, (rec +: args) map transform).copiedFrom(e))
 
       case _ => super.transform(e)
+    }
+
+    /** The call of the method `id` on `rec` through the root declaration of its symbol, which dispatches to
+      * the same override, so that the calls on a value share one term whatever the static type of the receiver.
+      * Abstract classes redeclare methods to narrow their types, such as the outer accessors of
+      * [[xlang.MemberClasses]], and a call through each redeclaration would be its own term, unfolded on its own.
+      *
+      * The call only goes through the root when the redeclarations between the static class of `rec` and the
+      * root have no contract of their own and take the same parameters, so that the call checks and assumes
+      * the same contract. Their return types may narrow that of the root to a class type, to which the result
+      * is cast. */
+    private def rootCall(e: s.Expr, rec: s.Expr, id: Identifier, tps: Seq[s.Type], args: Seq[s.Expr],
+                         ct: s.ClassType)(using s.Symbols): Option[t.Expr] = id match {
+      case sid: SymbolIdentifier =>
+        val tcds = ct.tcd +: ct.tcd.ancestors
+        val defining = tcds.flatMap(tcd => tcd.cd.methods.find(_.symbol == sid.symbol).map(tcd -> symbols.getFunction(_)))
+        val roots = defining.filter { case (tcd, _) => !tcd.ancestors.exists(a => defining.exists(_._1.id == a.id)) }
+        roots match {
+          case Seq((rtcd, rfd)) if rfd.id != id =>
+            val fd = symbols.getFunction(id)
+            val tcd = tcds.find(tcd => fd.flags.contains(s.IsMethodOf(tcd.id))).get
+            // the redeclarations between the static class and the root
+            val between = defining.filter { case (dtcd, dfd) =>
+              dfd.id != rfd.id && (dtcd.id == tcd.id || tcd.ancestors.exists(_.id == dtcd.id))
+            }
+            def signature(dtcd: s.TypedClassDef, dfd: s.FunDef): (Seq[s.Type], s.Type) = {
+              val subst = dtcd.tpSubst ++ (dfd.typeArgs zip rfd.typeArgs)
+              val paramSubst = (dfd.params zip rfd.params).map { case (vd, rvd) => vd -> rvd.toVariable }.toMap
+              def tpe(tp: s.Type) = s.typeOps.instantiateType(s.typeOps.replaceFromSymbols(paramSubst, tp), subst)
+              (dfd.params.map(vd => tpe(vd.tpe)), tpe(dfd.returnType))
+            }
+            val (rparams, rret) = signature(rtcd, rfd)
+            val compatible = between.forall { case (dtcd, dfd) =>
+              val (params, ret) = signature(dtcd, dfd)
+              dfd.tparams.size == rfd.tparams.size && dfd.params.size == rfd.params.size &&
+                exprOps.deconstructSpecs(dfd.fullBody)._1.isEmpty && params == rparams &&
+                (ret == rret || ret.isInstanceOf[s.ClassType])
+            }
+            if (!compatible) None else {
+              val call = t.FunctionInvocation(rfd.id, (rtcd.tps ++ tps) map transform,
+                (rec +: args) map transform).copiedFrom(e)
+              val (_, expected) = signature(tcd, fd)
+              Some(if (expected == rret) call else
+                t.Annotated(t.AsInstanceOf(call, transform(expected)).copiedFrom(e), Seq(t.DropVCs)).copiedFrom(e))
+            }
+          case _ => None
+        }
+      case _ => None
     }
   }
 
@@ -207,14 +256,16 @@ class MethodLifting(override val s: Trees, override val t: oo.Trees)
       .toSeq
 
     val invariants = invariantOverrides.map {
-      case (o, ((id, Override(_, optFid, _))) :: rest) if o.fid.isEmpty =>
+      case (o, fs @ (((id, Override(_, optFid, _))) :: _)) if o.fid.isEmpty =>
         new FunDef(
           id.freshen,
           Seq.empty,
           Seq.empty,
           BooleanType(),
           BooleanLiteral(true),
-          Seq(IsInvariant, IsMethodOf(cid))
+          // the invariant isn't checked when values are built if none of its overrides are
+          Seq(IsInvariant, IsMethodOf(cid)) ++
+            (if (fs.forall(p => symbols.getFunction(p._1).flags contains DropVCs)) Seq(DropVCs) else Seq())
         ).setPos(optFid match {
           case Some(fid) => symbols.getFunction(fid).getPos
           case None => symbols.getClass(cid).getPos
@@ -282,15 +333,19 @@ class MethodLifting(override val s: Trees, override val t: oo.Trees)
 
         val (tpe, expr) = {
           val ntpMap = descendant.tpSubst ++ (nfd.typeArgs zip fd.typeArgs)
+          // The types of the overriding method may depend on its parameters, which are bound to those of `fd`
+          val paramSubst: Map[s.ValDef, s.Expr] = (nfd.params zip fd.params).map { case (vd2, vd1) => vd2 -> vd1.toVariable }.toMap
+          def overrideType(tpe: s.Type): s.Type =
+            s.typeOps.instantiateType(s.typeOps.replaceFromSymbols(paramSubst, tpe), ntpMap)
           val args = (fd.params zip nfd.params).map { case (vd1, vd2) =>
             wrap(
               transformer.transform(vd1.toVariable),
               s.typeOps.instantiateType(vd1.tpe, tpMap),
-              s.typeOps.instantiateType(vd2.tpe, ntpMap)
+              overrideType(vd2.tpe)
             )
           }
           (
-            s.typeOps.instantiateType(nfd.returnType, ntpMap),
+            overrideType(nfd.returnType),
             t.FunctionInvocation(
               nfd.id,
               descType.tps ++ fd.tparams.map(tdef => transformer.transform(tdef.tp)),
@@ -300,23 +355,34 @@ class MethodLifting(override val s: Trees, override val t: oo.Trees)
         }
 
         val expectedType = s.typeOps.instantiateType(fd.returnType, tpMap)
-        (t.IsInstanceOf(arg.toVariable, descType).copiedFrom(arg), wrap(expr, tpe, expectedType))
+        val res = wrap(expr, tpe, expectedType)
+        // The library is assumed verified, and has no positions, so the VCs of dispatching from it are
+        // reported only for user overrides, at the override
+        if (fd.isLibrary && (nfd.isLibrary || descendant.cd.isLibrary)) {
+          (t.IsInstanceOf(arg.toVariable, descType).copiedFrom(arg), unchecked(res))
+        } else {
+          if (fd.getPos == NoPosition) t.exprOps.preTraversal(e => if (e.getPos == NoPosition) e.setPos(nfd.getPos))(res)
+          (t.IsInstanceOf(arg.toVariable, descType).copiedFrom(arg), res)
+        }
       }
     }).flatten
 
     val returnType = transformer.transform(fd.returnType)
 
-    val notFullyOverriden: Boolean = !(cd.flags contains IsSealed) || {
-      def rec(fo: Override): Boolean = fo match {
-        case Override(_, Some(_), _) => true
-        case Override(_, _, children) => children.forall(rec)
-      }
-
+    // The body of `fd` is unreachable only if every instance of `cd` is an instance of a class that
+    // overrides it. Each class without an override must then be abstract and sealed, with all its
+    // children fully overriding it (a child without an override inherits the body of `fd`).
+    def fullyOverridden(cd: ClassDef, cos: Seq[Override]): Boolean = {
       val coMap = cos.map(co => co.cid -> co).toMap
-      cd.children(using symbols).exists {
-        ccd => !(coMap contains ccd.id) || !rec(coMap(ccd.id))
+      cd.isAbstract && cd.isSealed && cd.children(using symbols).forall { ccd =>
+        coMap.get(ccd.id).exists {
+          case Override(_, Some(_), _) => true
+          case Override(_, None, children) => fullyOverridden(ccd, children)
+        }
       }
     }
+
+    val notFullyOverriden: Boolean = !fullyOverridden(cd, cos)
 
     val (specs, body) = exprOps.deconstructSpecs(fd.fullBody)
 
