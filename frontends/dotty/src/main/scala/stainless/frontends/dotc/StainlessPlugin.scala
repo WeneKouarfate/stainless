@@ -147,7 +147,7 @@ class StainlessPlugin extends StandardPlugin {
         val adapter = new ReporterAdapter(base.reporter.debugSections)
         // --timeout:t
         val timeoutOptions = timeout.toSeq.map(inox.optTimeout(_))
-        // --function:f1,f2,...
+        // --function:f1;f2;...
         val functionOptions = functions.headOption.toSeq.map(_ => stainless.optFunctions(functions))
         
         inox.Context(
