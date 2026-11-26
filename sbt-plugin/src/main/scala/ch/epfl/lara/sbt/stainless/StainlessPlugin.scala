@@ -26,6 +26,7 @@ object StainlessPlugin extends sbt.AutoPlugin {
     val stainlessVersion        = settingKey[String]("The version of stainless to use")
     val stainlessEnabled        = settingKey[Boolean]("Enable stainless")
     val stainlessTimeout        = settingKey[Option[Double]]("Per-verification timeout in seconds")
+    val stainlessFunctions      = settingKey[Seq[String]]("Only consider the given fully or partially qualified function names")
     val stainlessExtraDeps      = settingKey[Seq[sbt.librarymanagement.ModuleID]]("Extra source dependencies to pass along to Stainless")
     val stainlessExtraResolvers = settingKey[Seq[sbt.librarymanagement.MavenRepository]]("Extra resolvers to pass along to Stainless")
   }
@@ -72,6 +73,7 @@ object StainlessPlugin extends sbt.AutoPlugin {
     stainlessVersion        := BuildInfo.stainlessVersion,
     stainlessEnabled        := true,
     stainlessTimeout        := None,
+    stainlessFunctions      := Seq.empty,
     stainlessExtraDeps      := Seq.empty,
     autoCompilerPlugins     := true,
     ivyConfigurations       += StainlessLibSources,
@@ -243,6 +245,19 @@ object StainlessPlugin extends sbt.AutoPlugin {
             sys.error(s"Invalid stainlessTimeout: $timeout. It must be a finite, non-negative number.")
           else
             Seq(s"-P:stainless:timeout:$timeout")
+        } ++ {
+          val configured = stainlessFunctions.value
+          if (configured.exists(_.contains(',')))
+            sys.error("Invalid stainlessFunctions entry: function names must not contain commas.")
+          else if (configured.exists(_.trim.isEmpty))
+            sys.error("Invalid stainlessFunctions entry: function names must not be empty.")
+          else {
+            val functions = configured.map(_.trim).distinct
+            if (functions.nonEmpty)
+              Seq(s"-P:stainless:functions:${functions.mkString(",")}")
+            else
+              Seq.empty
+          }
         } ++ (
           // The stainless library uses qualified types (e.g. UInt31 in stainless.lang),
           // so its sources only parse with the experimental feature enabled.

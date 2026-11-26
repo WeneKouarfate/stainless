@@ -16,7 +16,7 @@ assertLogMessage := checkLogContains(
 lazy val success = (project in file("success"))
   .enablePlugins(StainlessPlugin)
   .settings(commonSettings)
-  //.settings(stainlessTimeout := None)
+  .settings(stainlessTimeout := None)
 
 lazy val failure = (project in file("failure"))
   .enablePlugins(StainlessPlugin)

@@ -249,6 +249,13 @@ in experimenting with Stainless. The ``stainlessEnabled`` setting is set to
 stainlessEnabled := false`` while inside the sbt interactive shell to
 temporarily bypass checking.
 
+To restrict verification to selected functions, set ``stainlessFunctions`` to a
+sequence of fully or partially qualified names. For example:
+
+.. code-block:: scala
+
+  stainlessFunctions := Seq("List.size", "size")
+
 
 If you need to run your code with the Stainless SBT plugin, you can create a
 ``Main.scala`` file as follows in the correct source directory (e.g.
